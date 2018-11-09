@@ -1,0 +1,13 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+click = "*"
+pybee = {file = "https://github.com/riag/pybee/releases/download/0.1.0/pybee-0.1.0-py3-none-any.whl"}
+
+[dev-packages]
+
+[requires]
+python_version = "3.7"
