@@ -25,6 +25,8 @@ class GitRepoContext(object):
         self.origin_repos_dir = ''
         self.new_repos_dir = ''
 
+        self.dry_run = False
+
 class BaseMoveAction(object):
     def __init__(self, context, key, info):
         self.context = context
@@ -73,6 +75,10 @@ class BaseMoveAction(object):
                 cmd, cwd=fpath, shell=True
                 )
     def git_push(self, fpath):
+        if self.context.dry_run:
+            print('in dry run mode, so ignore git push')
+            return
+
         cmd = 'git push'
         subprocess.run(cmd, cwd=fpath, shell=True)
 
@@ -98,6 +104,9 @@ class BaseMoveAction(object):
 
 def copy_ignore_git_dir(src, names):
     return ['.git']
+
+def copy_ignore_git_dir_and_ignore(src, names):
+    return ['.git', '.gitignore']
 
 class MoveOneRepoAction(BaseMoveAction):
     def __init__(self, context, src, dest):
@@ -149,15 +158,76 @@ class MoveOneRepoAction(BaseMoveAction):
         self.context.result[self.key] = 'ok'
 
 
+class MergeMultiReposAction(BaseMoveAction):
+    def __init__(self, context, src, dest, sub_dir_repo_map):
+        info = 'merge multi repos to %s' % dest
+        super().__init__(context, dest, info)
+        
+        self.src_url = src
+        self.dest_url = dest
+        self.sub_dir_repo_map = sub_dir_repo_map
+
+        self.origin_repo_name = ''
+        if self.src_url:
+            self.origin_repo_name = self.get_repo_name(
+                self.src_url
+                )
+        self.new_repo_name = self.get_repo_name(
+                self.dest_url
+                )
+    def merge_repo(self, dest_dir, sub_dir, src_url):
+        origin_repos_dir = self.context.origin_repos_dir
+
+        repo_name = self.get_repo_name(src_url)
+
+        origin_repo_path = os.path.join(origin_repos_dir, repo_name)
+        self.git_clone(origin_repo_path, src_url)
+
+        d = os.path.join(dest_dir, sub_dir)
+
+        pybee.path.copytree(
+                origin_repo_path, d,
+                ignore=copy_ignore_git_dir_and_ignore)
+
+    def run(self):
+
+        origin_repos_dir = self.context.origin_repos_dir
+        new_repos_dir = self.context.new_repos_dir
+
+        new_repo_path = os.path.join(new_repos_dir, self.new_repo_name)
+        self.git_clone(new_repo_path, self.dest_url)
+
+        if self.src_url:
+            origin_repo_path = os.path.join(origin_repos_dir, self.origin_repo_name)
+            self.git_clone(origin_repo_path, self.src_url)
+
+            pybee.path.copytree(
+                    origin_repo_path, new_repo_path,
+                    ignore=copy_ignore_git_dir)
+
+        for sub_dir, repo_url in self.sub_dir_repo_map.items():
+            self.merge_repo(new_repo_path, sub_dir, repo_url)
+
+        self.add_all_to_git_repo(new_repo_path)
+        self.git_commit(new_repo_path, 
+                self.context.config.git_commit_msg
+                )
+        self.git_push(new_repo_path)
+        self.context.result[self.key] = 'ok'
+
 def load_config(config_file):
-    module = pybee.importutil.import_module_from_src('git-repos-config', config_file)
+    module = pybee.importutil.import_module_from_src(
+            'git-repos-config', config_file
+            )
     return module
 
-def create_context(config):
+def create_context(config, dry_run):
     context = GitRepoContext(config)
     context.work_dir = os.path.join(curr_path, 'work-repos')
     context.origin_repos_dir = os.path.join(context.work_dir, 'origin-repos')
     context.new_repos_dir = os.path.join(context.work_dir, 'new-repos')
+
+    context.dry_run = dry_run
 
     for origin_url, m in config.one_repo_map.items():
         with_submodules = False
@@ -168,6 +238,14 @@ def create_context(config):
             with_submodules = m.get('with-submodules', with_submodules)
         action = MoveOneRepoAction(context, origin_url, dest_repo)
         action.with_submodules = with_submodules
+
+        context.action_list.append(action)
+
+    for dest_url, m in config.multi_repo_map.items():
+        src_url = m.pop('__src', None)
+        action = MergeMultiReposAction(
+                context, src_url, dest_url, m
+                )
 
         context.action_list.append(action)
 
@@ -200,11 +278,12 @@ def run_actions(context):
 
 @click.command()
 @click.option('-c','--config', 'config_file', default='git-repos.conf')
-def main(config_file):
+@click.option('--dry-run', 'dry_run', is_flag=True, default=False)
+def main(config_file, dry_run):
 
     config = load_config(config_file)
 
-    context = create_context(config)
+    context = create_context(config, dry_run)
 
     prepare(context)
 
