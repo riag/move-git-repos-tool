@@ -20,3 +20,16 @@ one_repo_map = {
 	},
 }
 
+
+# 多个 repo 合并成一个 repo, 目前这个还没实现
+# key 为 dest repo
+# value 为 map
+# map 中 key 为子目录, value 为对应的 src repo
+# map 中 __src  是对应的 src repo, 是在这个 repo 其中上合并其他 repo, 可以为空
+multi_repo_map = {
+	'<dest repo url>': {
+		'__src': '<src repo url>',
+		'<sub dir name>': '<merge repo url>',
+		'<sub dir name>': '<merge repo url>'
+	}
+}
