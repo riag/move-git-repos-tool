@@ -41,6 +41,15 @@ class BaseMoveAction(object):
             cmd = 'git clone %s %s' % (repo, fpath)
             subprocess.run(cmd, cwd=self.context.work_dir, shell=True) 
 
+    def git_clone_with_all_branches(self. fpath, repo):
+        '''
+        clone repo, 包括所有分支
+
+        checkout 其中一个分支
+        git checkout --track origin/develop
+        '''
+        pass
+
     def git_submodule_update(self, fpath):
 
         cmd = 'git submodule init'
@@ -80,6 +89,14 @@ class BaseMoveAction(object):
             return
 
         cmd = 'git push'
+        subprocess.run(cmd, cwd=fpath, shell=True)
+
+    def git_push_all(self, fpath):
+        if self.context.dry_run:
+            print('in dry run mode, so ignore git push')
+            return
+
+        cmd = 'git push origin --all'
         subprocess.run(cmd, cwd=fpath, shell=True)
 
     def git_commit(self, fpath, msg):
@@ -141,7 +158,7 @@ class MoveOneRepoAction(BaseMoveAction):
         # 直接在旧版的 repo 提交
         if self.context.config.with_full_git_log:
             self.set_git_repo_remote_url(origin_repo_path, self.dest_url)
-            self.git_push(origin_repo_path)
+            self.git_push_all(origin_repo_path)
 
             pybee.path.rmtree(origin_repo_path)
             self.git_pull(new_repo_path)
