@@ -41,14 +41,43 @@ class BaseMoveAction(object):
             cmd = 'git clone %s %s' % (repo, fpath)
             subprocess.run(cmd, cwd=self.context.work_dir, shell=True) 
 
-    def git_clone_with_all_branches(self. fpath, repo):
+    def git_clone_with_all_branches(self, fpath, repo):
         '''
         clone repo, 包括所有分支
 
         checkout 其中一个分支
         git checkout --track origin/develop
         '''
-        pass
+        self.git_clone(fpath, repo)
+        branches = self.git_branches(fpath)
+        print(branches)
+
+        for b in branches:
+            cmd = 'git checkout --track origin/%s' % b
+            subprocess.run(
+                    cmd, cwd=fpath, shell=True
+                    )
+
+    def git_branches(self, fpath):
+        cmd = 'git branch -r'
+        t = pybee.shell.call(cmd, cwd=fpath, shell=True)
+        tt = t.split('\n')
+        branches = []
+        for l in tt:
+            if not l: 
+                continue
+            l = l.strip()
+            if not l: 
+                continue
+            if l.startswith('origin/HEAD'): 
+                continue
+            if l == 'origin/master':
+                continue
+            if l.startswith('origin/'):
+                l = l[len('origin/'):]
+            branches.append(l)
+
+        return branches
 
     def git_submodule_update(self, fpath):
 
@@ -147,7 +176,7 @@ class MoveOneRepoAction(BaseMoveAction):
         new_repos_dir = self.context.new_repos_dir
 
         origin_repo_path = os.path.join(origin_repos_dir, self.origin_repo_name)
-        self.git_clone(origin_repo_path, self.src_url)
+        self.git_clone_with_all_branches(origin_repo_path, self.src_url)
 
         if self.with_submodules:
             self.git_submodule_update(origin_repo_path)
